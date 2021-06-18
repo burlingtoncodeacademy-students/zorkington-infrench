@@ -76,9 +76,7 @@ class Item {
   }
 
   use() {
-    if (this.name === "rockpile" && playerInv.includes("shovel")) {
-      return "you clear the rocks. behind is a passageway.";
-    } else if (this.name === "rock") {
+    if (this.name === "rock") {
       droppedItemIndex = playerInv.indexOf(this.name);
       playerInv.splice(droppedItemIndex, 1).toString();
       return this.action;
@@ -96,7 +94,9 @@ class Item {
     }
   }
 
-  examine() {}
+  examine() {
+    return this.description;
+  }
   drop() {
     droppedItemIndex = playerInv.indexOf(this.name);
     droppedItem = playerInv.splice(droppedItemIndex, 1).toString();
@@ -105,7 +105,7 @@ class Item {
   }
 }
 
-let note = new Item("note", "instructions", "instructions", true);
+let note = new Item("note", "a hastily written note. It reads\n'You can interact with your surroundings by typing an [action] followed by a [target]. acceptable actions are [use, take, examine, drop, walk, enter, inventory]. Walk in a cardinal direction. Enter a room. type items and rooms exactly how they appear. Good luck.'", "instructions", true);
 
 let shovel = new Item(
   "shovel",
@@ -139,7 +139,7 @@ let boulder = new Item("boulder", "A very large rock. Seems immovable");
 
 let rockpile = new Item(
   "rockpile",
-  "a loose pile of rocks",
+  "a loose pile of rocks. There appears to be something behind it.",
   "if only I had some way to clear this..."
 );
 
@@ -158,12 +158,12 @@ async function start() {
   let inputArray = answer.toLowerCase().split(" ");
   let action = inputArray[0];
   let target = inputArray[1];
+  let obj = inputArray[2];
+  
   if (action === "take") {
     if (roomLookupTable[currentRoom].inventory.includes(target)) {
       removedItemIndex = roomLookupTable[currentRoom].inventory.indexOf(target);
-      console.log(removedItemIndex);
       roomLookupTable[currentRoom].inventory.splice(removedItemIndex, 1);
-      console.log(roomLookupTable[currentRoom].inventory);
       console.log(itemLookupTable[target].take());
     } else {
       console.log(`There is no ${target} to take.`);
@@ -171,10 +171,27 @@ async function start() {
   } else if (action === "use") {
     if (!playerInv.includes(target)) {
       console.log("You can't use what you don't have!");
+    } else if (
+      roomLookupTable[currentRoom].inventory.includes(obj) &&
+      obj === "rockpile" &&
+      target === "shovel"
+    ) {
+      removedItemIndex = roomLookupTable[currentRoom].inventory.indexOf(obj);
+      roomLookupTable[currentRoom].inventory.splice(removedItemIndex, 1);
+      console.log(
+        "You clear the rocks to see a passageway leading to a hidden room."
+      );
     } else {
       console.log(itemLookupTable[target].use());
     }
   } else if (action === "examine") {
+    if (roomLookupTable[currentRoom].inventory.includes(target) || playerInv.includes(target)) {
+      console.log(itemLookupTable[target].examine());
+    } else if (currentRoom.includes(target)) {
+      console.log(roomLookupTable[currentRoom].description)
+    } else {
+      console.log(`there is no ${target} to examine`);
+    }
   } else if (action === "drop") {
     if (playerInv.includes(target)) {
       console.log(itemLookupTable[target].drop());
@@ -185,7 +202,6 @@ async function start() {
     }
   } else if (action === "walk") {
   } else if (action === "enter") {
-    console.log(roomLookupTable[currentRoom].inventory);
     if (roomChange[currentRoom].includes(target)) {
       if (target === "endroom" && !playerInv.includes("key")) {
         console.log(`The door is locked.`);
@@ -199,9 +215,12 @@ async function start() {
       ) {
         console.log("There seems to be a pile of rocks in the way");
       } else {
-        console.log(`You enter ${target}`);
         currentRoom = target;
-        console.log(roomLookupTable[currentRoom].description);
+        console.log(
+          roomLookupTable[currentRoom].name,
+          "\n",
+          roomLookupTable[currentRoom].description
+        );
       }
     } else if (currentRoom === target) {
       console.log(`You're already in ${target}`);
@@ -226,8 +245,9 @@ async function start() {
 console.log(`Cave Entrance.
 You awaken on the edge of a great plain at the foot of a mountain. 
 You are facing the mouth of a dark cave leading into the roots of the mountain.
-You don't remember how you got here or why you are here, but you feel something in your pocket. 
-The sun is setting and its getting cold...
+You don't remember how you got here or why you are here
+You feel something in your pocket(inventory). 
+The sun is setting and it's getting cold...
 `);
 start();
 // global variable: inventory
