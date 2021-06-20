@@ -9,7 +9,7 @@ function ask(questionText) {
     readlineInterface.question(questionText, resolve);
   });
 }
-// global variables.
+// !-------------------------------- global variables.
 // array of player inventory
 let playerInv = ["note"];
 // index number of item to be dropped
@@ -18,11 +18,15 @@ let droppedItemIndex;
 let droppedItem;
 // index of the item to be removed from a rooms inventory
 let removedItemIndex;
-// the players status.
+// the current location
+let currentRoom = "outside";
+// the players status
 let player = {
   name: "",
+  location: currentRoom,
 };
 
+//  !-------------------------------- room class.
 class Room {
   constructor(
     name,
@@ -43,13 +47,14 @@ class Room {
     this.west = west;
     this.locked = locked || false;
   }
+  // capitalize room name
   capitalize() {
     let firstLetter = this.name[0];
     let restOfWord = this.name.slice(1);
     return firstLetter.toUpperCase() + restOfWord.toLowerCase();
   }
 }
-
+// !--------------------------------- room objects
 let outside = new Room(
   "outside",
   "You are facing south, looking into the mouth of a dark cave. There are some rocks on the ground, but little else of note. Behind you to the north is the grassy field. either side of you are steep cliff walls.",
@@ -58,17 +63,17 @@ let outside = new Room(
   "cave"
 );
 let cave = new Room(
-  "cavern",
-  "You are in a large, dimly lit cavern. The only light is coming from a tunnel to the east. There is a large pile of rocks in a corner on the west wall. Leaning against a large boulder in the center of the room is a shovel. To the south is a stairway leading to complete darkness.",
-  ["boulder", "shovel", "rockpile"],
+  "cave",
+  "You are in a large, dimly lit cavern. The only light is coming from a tunnel to the east. There is a large pile of rocks in a corner on the west wall. Leaning against a large boulder near the center of the room is a shovel. To the south is a stairway leading down to complete darkness.",
+  ["boulder", "shovel", "rocks"],
   "outside",
   "lowercavern",
-  "sideroom",
+  "tunnel",
   "hiddenroom"
 );
 
-let sideroom = new Room(
-  "sideroom",
+let tunnel = new Room(
+  "tunnel",
   "The tunnel widens slightly before ending abruptly. It appears that some time ago this passageway continued, but the ceiling caved in ahead. On the ground is a lantern, the source of light you saw before",
   ["lantern"],
   undefined,
@@ -79,10 +84,10 @@ let sideroom = new Room(
 
 let hiddenroom = new Room(
   "hiddenroom",
-  "The crevice opens to reveal a small room. Here you see a dusty table littered with old parchments and maps. To the south is a dark, winding tunnel leading downwards.",
-  ["key", "desk"],
+  "The crevice opens to reveal a small room. Here you see a dusty table littered with old parchments and maps.",
+  ["key", "table"],
   undefined,
-  "lowercavern",
+  undefined,
   "cave",
   undefined,
   true
@@ -90,44 +95,41 @@ let hiddenroom = new Room(
 
 let lowercavern = new Room(
   "lowercavern",
-  "description of location",
+  "You are in a cavern that looks much like the one above. It is completely barren aside from a heavy wooden door on the east wall.",
   [],
   "cave",
   undefined,
-  "endroom",
-  "hiddenroom"
+  "endroom"
 );
 
 let endroom = new Room(
   "endroom",
-  "description of location",
-  ["win"],
+  "You are in a small chamber. Far away sunlight is coming through a hole in the ceiling. On the back wall there is a pedestal, upon which lies the item that you seek.",
+  ["item"],
   undefined,
   undefined,
   undefined,
   "lowercavern",
   true
 );
-
-let currentRoom = "outside";
-
+// object for location state machine
 let roomChange = {
   outside: ["cave"],
-  cave: ["sideroom", "hiddenroom", "lowercavern", "outside"],
-  sideroom: ["cave"],
-  hiddenroom: ["cave", "lowercavern"],
-  lowercavern: ["cave", "hiddenroom", "endroom"],
+  cave: ["tunnel", "hiddenroom", "lowercavern", "outside"],
+  tunnel: ["cave"],
+  hiddenroom: ["cave"],
+  lowercavern: ["cave", "endroom"],
 };
-
+// room lookup table
 let roomLookupTable = {
   outside: outside,
   cave: cave,
-  sideroom: sideroom,
+  tunnel: tunnel,
   hiddenroom: hiddenroom,
   lowercavern: lowercavern,
   endroom: endroom,
 };
-
+// !-------------------------------- item class
 class Item {
   constructor(name, description, action, takeable) {
     this.name = name;
@@ -135,21 +137,30 @@ class Item {
     this.action = action || false;
     this.takeable = takeable || false;
   }
-
+  // function for use action
   use() {
     if (this.name === "rock") {
       droppedItemIndex = playerInv.indexOf(this.name);
       playerInv.splice(droppedItemIndex, 1).toString();
       return this.action;
+    } else if (
+      this.name === "shovel" &&
+      currentRoom === "cave" &&
+      roomLookupTable[currentRoom].inventory.includes("rocks")
+    ) {
+      removedItemIndex =
+        roomLookupTable[currentRoom].inventory.indexOf("rocks");
+      roomLookupTable[currentRoom].inventory.splice(removedItemIndex, 1);
+      return "You clear the rocks on the west wall to see a passageway leading to a hidden room.";
     } else {
       return this.action;
     }
   }
-
+  // function for take action
   take() {
     if (this.takeable) {
       if (roomLookupTable[currentRoom].inventory.includes(this.name)) {
-        if (this.name === "win") {
+        if (this.name === "item") {
           console.log("Congratulations! You win!");
           process.exit();
         } else {
@@ -167,17 +178,18 @@ class Item {
       return "You can't take that";
     }
   }
-
+  // function for examine action
   examine() {
     return this.description;
   }
+  // function for drop action
   drop() {
     droppedItemIndex = playerInv.indexOf(this.name);
     droppedItem = playerInv.splice(droppedItemIndex, 1).toString();
     return `You dropped the ${this.name}`;
   }
 }
-
+// !------------------------------- item objects
 let note = new Item(
   "note",
   `A hastily written note containing what seems to be rules to something. Strange. It reads:\n"You can interact with your surroundings by typing an [action] followed by a [target]. Acceptable actions are [use, take, examine, drop, walk, enter, inventory]. [use, take] are followed by an item. You can 'examine' an item or a room. You can 'walk' in a cardinal direction. You can 'enter' a room. You can check your inventory with 'i', 'inventory', or 'take inventory'. Type items and rooms exactly how they appear. Good luck."`,
@@ -188,7 +200,7 @@ let note = new Item(
 let shovel = new Item(
   "shovel",
   "A rusty old shovel. Doesn't look like anyone has used it in a while.",
-  "This may be useful for something.",
+  "There is nothing here to use this shovel on",
   true
 );
 
@@ -202,7 +214,7 @@ let key = new Item(
 let lantern = new Item(
   "lantern",
   "A glass oil lantern. May it be a light to you in dark places when all other lights go out",
-  "the lantern lights, filling the room with a warm glow",
+  "The lantern is already lit",
   true
 );
 
@@ -215,13 +227,17 @@ let rock = new Item(
 
 let boulder = new Item("boulder", "A very large rock. Seems immovable");
 
-let rockpile = new Item(
-  "rockpile",
-  "a loose pile of rocks. There appears to be something behind it. If only you had some way to clear this..."
+let rocks = new Item(
+  "rocks",
+  "a pile of rocks. There appears to be something behind it. If only you had some way to clear this..."
 );
 
-let win = new Item("win", "take this and you win", "you win", true);
+let table = new Item("table", "amongst the papers on the table, you see a key");
 
+let door = new Item("door", "a heavy wooden door.", "");
+
+let item = new Item("item", "take this and you win", "you win", true);
+// item lookup table
 let itemLookupTable = {
   key: key,
   shovel: shovel,
@@ -229,53 +245,57 @@ let itemLookupTable = {
   rock: rock,
   boulder: boulder,
   note: note,
-  rockpile: rockpile,
-  win: win,
+  rocks: rocks,
+  table: table,
+  door: door,
+  item: item,
 };
-
+// asks the user for a name and adds it to the name property in the player status object
 async function yourName() {
   player.name = await ask("What is your name?\n>_");
   console.log(
-    `Now you remember. You are ${player.name}. \nYou feel something in your pocket(inventory).\nThe sun is setting and it's getting cold...`
+    `Now you remember. You are ${player.name}. \nThe sun is setting and it's getting cold.\nYou feel something in your pocket(inventory)...`
   );
+  // calls the function to run the rest of the game
   start();
 }
+// add more actions(check, read) and items, pocket
+// the main function that runs the game
 async function start() {
+  // takes user input. lowercases and turns input into an array. first word in array becomes the action, second becomes the target.
   let answer = await ask("What would you like to do?\n>_");
   let inputArray = answer.toLowerCase().split(" ");
   let action = inputArray[0];
   let target = inputArray[1];
-  let obj = inputArray[2];
-
+  // 'take' action
   if (action === "take") {
+    // if target is inventory, show inventory
     if (target === "inventory") {
       if (playerInv.length === 0) {
         console.log("Your inventory is empty");
       } else {
+        // turns inventory into a string
         console.log(playerInv.join("\n"));
       }
+      // checks if the item is in the lookup table
     } else if (!itemLookupTable[target]) {
       console.log(`You can't take ${target}`);
+      // runs take function from the item class on the target
     } else {
       console.log(itemLookupTable[target].take());
     }
+    // 'use' action
   } else if (action === "use") {
+    // checks if the target is in the user's inventory
     if (!playerInv.includes(target)) {
       console.log("You can't use what you don't have!");
-    } else if (
-      roomLookupTable[currentRoom].inventory.includes(obj) &&
-      obj === "rockpile" &&
-      target === "shovel"
-    ) {
-      removedItemIndex = roomLookupTable[currentRoom].inventory.indexOf(obj);
-      roomLookupTable[currentRoom].inventory.splice(removedItemIndex, 1);
-      console.log(
-        "You clear the rocks to see a passageway leading to a hidden room."
-      );
+      // runs use function on the target
     } else {
       console.log(itemLookupTable[target].use());
     }
+    // 'examine' action
   } else if (action === "examine") {
+    // if the target is in the player inventory or the current room inventory, run the examine function on the target
     if (
       roomLookupTable[currentRoom].inventory.includes(target) ||
       playerInv.includes(target)
@@ -286,39 +306,50 @@ async function start() {
     } else {
       console.log(`there is no ${target} to examine`);
     }
+    // drop action
   } else if (action === "drop") {
+    // if player inventory includes target item, run drop function and add the item to the rooms inventory
     if (playerInv.includes(target)) {
       console.log(itemLookupTable[target].drop());
       roomLookupTable[currentRoom].inventory.push(droppedItem);
     } else {
       console.log("You can't drop what you don't have!");
     }
+    // walk action. takes a direction as target
   } else if (action === "walk") {
+    // north
     if (target === "north") {
+      // if you are outside, end game if user walks north
       if (currentRoom === "outside") {
         console.log(
-          "You walk away from the cave into the open field. As the sun sets, darkness envelops you. It becomes cold. Very cold. You die."
+          "You walk away from the cave into the open field. As the sun sets, darkness envelops you. It becomes cold. Very cold. You died."
         );
         process.exit();
+        // checks if the current room has no room to the north
       } else if (roomLookupTable[currentRoom].north === undefined) {
         console.log("You can't walk north");
+        // change current room to the room north
       } else {
         currentRoom = roomLookupTable[currentRoom].north;
+        // print new room name and description
         console.log(
           roomLookupTable[currentRoom].capitalize(),
           "\n",
           roomLookupTable[currentRoom].description
         );
       }
-    }
-    if (target === "south") {
+      // south
+    } else if (target === "south") {
+      // same check as above
       if (roomLookupTable[currentRoom].south === undefined) {
         console.log("You can't walk south");
+        // if the user is in the first cave room and tries to walk to the lower cavern without light, game ends.
       } else if (currentRoom === "cave" && !playerInv.includes("lantern")) {
         console.log(
           `You descend the stairs into complete darkness. You can't see anything. As you're walking down, your foot hits something and you trip down the stairs. You died.`
         );
         process.exit();
+        // allows user to enter lower cavern if they have light
       } else if (currentRoom === "cave" && playerInv.includes("lantern")) {
         currentRoom = roomLookupTable[currentRoom].south;
         console.log(
@@ -326,6 +357,7 @@ async function start() {
           "\n",
           roomLookupTable[currentRoom].description
         );
+        // change current room to the room south
       } else {
         currentRoom = roomLookupTable[currentRoom].south;
         console.log(
@@ -334,12 +366,14 @@ async function start() {
           roomLookupTable[currentRoom].description
         );
       }
-    }
-    if (target === "east") {
+      // east
+    } else if (target === "east") {
       if (roomLookupTable[currentRoom].east === undefined) {
         console.log("You can't walk east");
+        // doesn't let user enter the final room without the key
       } else if (currentRoom === "lowercavern" && !playerInv.includes("key")) {
         console.log(`The door is locked.`);
+        // allows user to enter the final room with key and prints specific message
       } else if (currentRoom === "lowercavern" && playerInv.includes("key")) {
         currentRoom = roomLookupTable[currentRoom].east;
         console.log(
@@ -350,6 +384,7 @@ async function start() {
           "\n",
           roomLookupTable[currentRoom].description
         );
+        // change current room to room east
       } else {
         currentRoom = roomLookupTable[currentRoom].east;
         console.log(
@@ -358,15 +393,14 @@ async function start() {
           roomLookupTable[currentRoom].description
         );
       }
-    }
-    if (target === "west") {
+      // west
+    } else if (target === "west") {
       if (roomLookupTable[currentRoom].west === undefined) {
         console.log("You can't walk west");
-      } else if (
-        currentRoom === "cave" &&
-        cave.inventory.includes("rockpile")
-      ) {
+        // doesn't allow user to enter hiddenroom if the cave inventory includes rocks.
+      } else if (currentRoom === "cave" && cave.inventory.includes("rocks")) {
         console.log("There seems to be a pile of rocks in the way");
+        // change current room to room west
       } else {
         currentRoom = roomLookupTable[currentRoom].west;
         console.log(
@@ -375,24 +409,29 @@ async function start() {
           roomLookupTable[currentRoom].description
         );
       }
+    } else {
+      console.log("That is not a direction you can walk in");
     }
+    // enter action. takes a room name as a target
   } else if (action === "enter") {
+    // checks state machine lookup table
     if (roomChange[currentRoom].includes(target)) {
+      // doesn't allow user to enter final room without key
       if (target === "endroom" && !playerInv.includes("key")) {
         console.log(`The door is locked.`);
       } else if (target === "endroom" && playerInv.includes("key")) {
         console.log(`You open the door with your key.\n You enter ${target}`);
+        endroom.locked = false;
         currentRoom = target;
         console.log(
           roomLookupTable[currentRoom].capitalize(),
           "\n",
           roomLookupTable[currentRoom].description
         );
-      } else if (
-        target === "hiddenroom" &&
-        cave.inventory.includes("rockpile")
-      ) {
+        // doesnt allow user to enter hidden room if the cave inventory includes rocks
+      } else if (target === "hiddenroom" && cave.inventory.includes("rocks")) {
         console.log("There seems to be a pile of rocks in the way");
+        // changes current room to target room
       } else {
         currentRoom = target;
         console.log(
@@ -401,49 +440,33 @@ async function start() {
           roomLookupTable[currentRoom].description
         );
       }
+      // checks if player is already in the target room
     } else if (currentRoom === target) {
       console.log(`You're already in ${target}`);
+      // doesnt allow player to enter a room that is not adjacent or invalid input
     } else {
       console.log(`you can't enter ${target} from this location`);
     }
+    // inventory action. allows user to check inventory by typing just i or inventory
   } else if (action === "inventory" || action === "i") {
+    // checks if inventory is empty
     if (playerInv.length === 0) {
       console.log("Your inventory is empty");
+      // prints inventory as a string with line breaks in between
     } else {
       console.log(playerInv.join("\n"));
     }
+    // checks if the input is valid
   } else {
-    console.log("You can't do that.");
+    console.log(`You don't know how to ${action}`);
   }
+  // calls the function after every input
   return start();
 }
+// welcome message
 console.log(`Outside.
 You awaken on the edge of a great plain at the foot of a mountain. 
 You are facing the mouth of a dark cave leading into the roots of the mountain.
 You don't remember who you are or how you got here.`);
-
+// calls the function to ask name
 yourName();
-
-// global variable: inventory
-// classes: item, room
-// each room needs inventory
-// item lookupTable
-// room lookupTable
-// room state machine
-// item state machine
-// awaken confused.
-// room 1. mouth of cave. compelled to continue. if go back, leave gameYou are facing south, looking into the mouth of a dark cave.
-// behind you to the north is the plain. either side of you are steep cliff walls.
-// You do not know where you are or how you got here, but something compels you to enter this cave...
-// room 1 inventory
-// room 2. entrance cavern. passage east. staircase south. hidden passage west.
-// room 2 inventory
-// room 3. east of room 2. small room.
-// room 3 inventory: key or lightsource?
-// room 4. west of room 2. hidden room. passage south leading southeast and down to room 5.
-// room 4 inventory: key?
-// room 5. south of entrance cavern. lower cavern.
-// room 5 inventory
-// room 6. east of room 5. victory room
-
-// find index of an item that is input by user. find the .indexof user input. assign that idex number to a variable. roominventory.splice[variable]. or somethihng
