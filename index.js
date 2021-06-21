@@ -32,11 +32,11 @@ class Room {
     name,
     description,
     inventory = [],
+    // the room in the direction relative to this room
     north = undefined,
     south = undefined,
     east = undefined,
-    west = undefined,
-    locked
+    west = undefined
   ) {
     this.name = name;
     this.description = description;
@@ -45,7 +45,6 @@ class Room {
     this.south = south;
     this.east = east;
     this.west = west;
-    this.locked = locked || false;
   }
   // capitalize room name
   capitalize() {
@@ -89,28 +88,26 @@ let hiddenroom = new Room(
   undefined,
   undefined,
   "cave",
-  undefined,
-  true
+  undefined
 );
 
 let lowercavern = new Room(
   "lowercavern",
   "You are in a cavern that looks much like the one above. It is completely barren aside from a heavy wooden door on the east wall.",
-  [],
+  ["door"],
   "cave",
   undefined,
-  "endroom"
+  "deadend"
 );
 
-let endroom = new Room(
-  "endroom",
-  "You are in a small chamber. Far away sunlight is coming through a hole in the ceiling. On the back wall there is a pedestal, upon which lies the item that you seek.",
-  ["item"],
+let deadend = new Room(
+  "deadend",
+  "You are in a small chamber. Far away moonlight is coming through a hole in the ceiling. In the far corner, you see a rope on the ground.",
+  ["rope"],
   undefined,
   undefined,
   undefined,
-  "lowercavern",
-  true
+  "lowercavern"
 );
 // object for location state machine
 let roomChange = {
@@ -118,7 +115,8 @@ let roomChange = {
   cave: ["tunnel", "hiddenroom", "lowercavern", "outside"],
   tunnel: ["cave"],
   hiddenroom: ["cave"],
-  lowercavern: ["cave", "endroom"],
+  lowercavern: ["cave", "deadend"],
+  deadend: ["lowercavern"],
 };
 // room lookup table
 let roomLookupTable = {
@@ -127,7 +125,7 @@ let roomLookupTable = {
   tunnel: tunnel,
   hiddenroom: hiddenroom,
   lowercavern: lowercavern,
-  endroom: endroom,
+  deadend: deadend,
 };
 // !-------------------------------- item class
 class Item {
@@ -160,17 +158,12 @@ class Item {
   take() {
     if (this.takeable) {
       if (roomLookupTable[currentRoom].inventory.includes(this.name)) {
-        if (this.name === "item") {
-          console.log("Congratulations! You win!");
-          process.exit();
-        } else {
-          removedItemIndex = roomLookupTable[currentRoom].inventory.indexOf(
-            this.name
-          );
-          roomLookupTable[currentRoom].inventory.splice(removedItemIndex, 1);
-          playerInv.push(this.name);
-          return `You picked up ${this.name}`;
-        }
+        removedItemIndex = roomLookupTable[currentRoom].inventory.indexOf(
+          this.name
+        );
+        roomLookupTable[currentRoom].inventory.splice(removedItemIndex, 1);
+        playerInv.push(this.name);
+        return `You picked up ${this.name}`;
       } else {
         return `There is no ${this.name} to take`;
       }
@@ -187,6 +180,14 @@ class Item {
     droppedItemIndex = playerInv.indexOf(this.name);
     droppedItem = playerInv.splice(droppedItemIndex, 1).toString();
     return `You dropped the ${this.name}`;
+  }
+
+  read() {
+    if (this.name === "note") {
+      return this.description;
+    } else {
+      return "You can't read that";
+    }
   }
 }
 // !------------------------------- item objects
@@ -234,9 +235,14 @@ let rocks = new Item(
 
 let table = new Item("table", "amongst the papers on the table, you see a key");
 
-let door = new Item("door", "a heavy wooden door.", "");
+let door = new Item("door", "a heavy wooden door with a keyhole.");
 
-let item = new Item("item", "take this and you win", "you win", true);
+let rope = new Item(
+  "rope",
+  "a long rope with a grappling hook fixed to one end",
+  "there is nowhere to use this here",
+  true
+);
 // item lookup table
 let itemLookupTable = {
   key: key,
@@ -248,18 +254,17 @@ let itemLookupTable = {
   rocks: rocks,
   table: table,
   door: door,
-  item: item,
+  rope: rope,
 };
 // asks the user for a name and adds it to the name property in the player status object
 async function yourName() {
   player.name = await ask("What is your name?\n>_");
   console.log(
-    `Now you remember. You are ${player.name}. \nThe sun is setting and it's getting cold.\nYou feel something in your pocket(inventory)...`
+    `Ah yes. You are ${player.name}. \nThe sun is setting and it's getting cold. You know that to turn back now would be certain death... \nYou feel something in your pocket(inventory)...`
   );
   // calls the function to run the rest of the game
   start();
 }
-// add more actions(check, read) and items, pocket
 // the main function that runs the game
 async function start() {
   // takes user input. lowercases and turns input into an array. first word in array becomes the action, second becomes the target.
@@ -289,6 +294,11 @@ async function start() {
     // checks if the target is in the user's inventory
     if (!playerInv.includes(target)) {
       console.log("You can't use what you don't have!");
+    } else if (target === "rope" && currentRoom === "deadend") {
+      console.log(
+        `Impressively, you throw the rope up into the hole in the ceiling, where it hooks to the opening far above. You give it a firm tug and it seems to be sturdy. As you begin to climb, you can smell the fresh air coming from above and you know that you will finally make it through this mountain. Now, to continue your journey...\nCongratulations! You Win!`
+      );
+      process.exit();
       // runs use function on the target
     } else {
       console.log(itemLookupTable[target].use());
@@ -314,6 +324,13 @@ async function start() {
       roomLookupTable[currentRoom].inventory.push(droppedItem);
     } else {
       console.log("You can't drop what you don't have!");
+    }
+    // 'read' action
+  } else if (action === "read") {
+    if (playerInv.includes(target)) {
+      console.log(itemLookupTable[target].read());
+    } else {
+      console.log("You can only read something if it's in your inventory");
     }
     // walk action. takes a direction as target
   } else if (action === "walk") {
@@ -417,11 +434,10 @@ async function start() {
     // checks state machine lookup table
     if (roomChange[currentRoom].includes(target)) {
       // doesn't allow user to enter final room without key
-      if (target === "endroom" && !playerInv.includes("key")) {
+      if (target === "deadend" && !playerInv.includes("key")) {
         console.log(`The door is locked.`);
-      } else if (target === "endroom" && playerInv.includes("key")) {
-        console.log(`You open the door with your key.\n You enter ${target}`);
-        endroom.locked = false;
+      } else if (target === "deadend" && playerInv.includes("key")) {
+        console.log(`You open the door with your key.\nYou enter ${target}`);
         currentRoom = target;
         console.log(
           roomLookupTable[currentRoom].capitalize(),
@@ -457,6 +473,16 @@ async function start() {
       console.log(playerInv.join("\n"));
     }
     // checks if the input is valid
+  } else if (
+    action === "check" &&
+    (target === "pocket" || target === "inventory")
+  ) {
+    if (playerInv.length === 0) {
+      console.log("Your inventory is empty");
+      // prints inventory as a string with line breaks in between
+    } else {
+      console.log(playerInv.join("\n"));
+    }
   } else {
     console.log(`You don't know how to ${action}`);
   }
@@ -465,8 +491,9 @@ async function start() {
 }
 // welcome message
 console.log(`Outside.
-You awaken on the edge of a great plain at the foot of a mountain. 
-You are facing the mouth of a dark cave leading into the roots of the mountain.
-You don't remember who you are or how you got here.`);
+After many days of travel, you reach the end of a great plain where a mountain range blocks your path.
+The only way to continue your journey is to go through the mountains. 
+You are facing the mouth of a dark cave leading into the roots of the mountains.
+`);
 // calls the function to ask name
 yourName();
